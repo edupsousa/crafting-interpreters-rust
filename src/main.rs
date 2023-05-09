@@ -116,15 +116,30 @@ enum TokenType {
 }
 
 #[derive(Debug, Clone)]
+enum Literal {
+    String(String),
+    Number(f64),
+}
+
+impl Literal {
+    fn some_string(string: String) -> Option<Self> {
+        Some(Self::String(string))
+    }
+    fn some_number(number: f64) -> Option<Self> {
+        Some(Self::Number(number))
+    }
+}
+
+#[derive(Debug, Clone)]
 struct Token {
     token_type: TokenType,
     lexeme: String,
-    literal: Option<String>,
+    literal: Option<Literal>,
     line: usize,
 }
 
 impl Token {
-    fn new(token_type: TokenType, lexeme: String, literal: Option<String>, line: usize) -> Self {
+    fn new(token_type: TokenType, lexeme: String, literal: Option<Literal>, line: usize) -> Self {
         Self {
             token_type,
             lexeme,
@@ -197,24 +212,53 @@ impl<'source> Scanner<'source> {
             ' ' | '\r' | '\t' => {}
             '\n' => self.line += 1,
             '"' => self.eat_string(),
+            c if c.is_digit(10) => self.eat_number(),
             unexpected => self.add_error(format!("Unexpected character: {}", unexpected)),
         }
     }
 
-    fn eat_string(&mut self) {
-        while self.peek() != '"' && !self.is_at_end() {
-            if self.peek() == '\n' {
-                self.line += 1;
-            }
+    fn eat_number(&mut self) {
+        while self.peek().is_digit(10) {
             self.advance();
         }
+        if self.peek() == '.' && self.peek_next().is_digit(10) {
+            self.advance();
+            while self.peek().is_digit(10) {
+                self.advance();
+            }
+        }
+        let value = self.source[self.start..self.current]
+            .parse::<f64>()
+            .unwrap();
+        self.add_token(TokenType::Number, Literal::some_number(value));
+    }
+
+    fn peek_next(&self) -> char {
+        if self.current + 1 >= self.source.len() {
+            '\0'
+        } else {
+            self.source.chars().nth(self.current + 1).unwrap()
+        }
+    }
+
+    fn eat_string(&mut self) {
+        self.advance_to_char_ml('"');
         if self.is_at_end() {
             self.add_error("Unterminated string.".to_string());
             return;
         }
         self.advance();
         let value = self.source[self.start + 1..self.current - 1].to_string();
-        self.add_token(TokenType::String, Some(value));
+        self.add_token(TokenType::String, Literal::some_string(value));
+    }
+
+    fn advance_to_char_ml(&mut self, expected: char) {
+        while self.peek() != expected && !self.is_at_end() {
+            if self.peek() == '\n' {
+                self.line += 1;
+            }
+            self.advance();
+        }
     }
 
     fn advance_to_eol(&mut self) {
@@ -244,7 +288,7 @@ impl<'source> Scanner<'source> {
         self.errors.push(error);
     }
 
-    fn add_token(&mut self, token_type: TokenType, literal: Option<String>) {
+    fn add_token(&mut self, token_type: TokenType, literal: Option<Literal>) {
         let token = Token::new(
             token_type,
             self.source[self.start..self.current].to_string(),

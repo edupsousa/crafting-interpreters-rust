@@ -732,3 +732,37 @@ impl fmt::Display for ParserError {
 }
 
 type ParserResult = Result<Expr, ParserError>;
+
+struct Interpreter {}
+
+impl Interpreter {
+    fn evaluate(&mut self, expr: &Expr) -> LiteralValue {
+        expr.accept(self)
+    }
+}
+
+impl Visitor<LiteralValue> Interpreter {
+    fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> LiteralValue {
+        expr.value.clone()
+    }
+
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> LiteralValue {
+        self.evaluate(&expr.expression)
+    }
+
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> LiteralValue {
+        let right = self.evaluate(&expr.right);
+
+        match expr.operator.token_type {
+            TokenType::Minus => match right {
+                LiteralValue::Number(n) => LiteralValue::Number(-n),
+                _ => panic!("Operand must be a number."),
+            },
+            TokenType::Bang => match right {
+                LiteralValue::Boolean(b) => LiteralValue::Boolean(!b),
+                _ => panic!("Operand must be a boolean."),
+            },
+            _ => panic!("Unknown unary operator."),
+        }
+    }
+}

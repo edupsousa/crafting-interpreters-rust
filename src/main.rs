@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::io::Write;
 use std::{error, fmt, fs, io};
 
@@ -115,6 +114,30 @@ enum TokenType {
     Eof,
 }
 
+impl TokenType {
+    fn from_keyword(keyword: &str) -> Option<TokenType> {
+        match keyword {
+            "and" => Some(TokenType::And),
+            "class" => Some(TokenType::Class),
+            "else" => Some(TokenType::Else),
+            "false" => Some(TokenType::False),
+            "for" => Some(TokenType::For),
+            "fun" => Some(TokenType::Fun),
+            "if" => Some(TokenType::If),
+            "nil" => Some(TokenType::Nil),
+            "or" => Some(TokenType::Or),
+            "print" => Some(TokenType::Print),
+            "return" => Some(TokenType::Return),
+            "super" => Some(TokenType::Super),
+            "this" => Some(TokenType::This),
+            "true" => Some(TokenType::True),
+            "var" => Some(TokenType::Var),
+            "while" => Some(TokenType::While),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Literal {
     String(String),
@@ -213,8 +236,18 @@ impl<'source> Scanner<'source> {
             '\n' => self.line += 1,
             '"' => self.eat_string(),
             c if c.is_digit(10) => self.eat_number(),
+            c if c.is_alphabetic() || c == '_' => self.eat_identifier(),
             unexpected => self.add_error(format!("Unexpected character: {}", unexpected)),
         }
+    }
+
+    fn eat_identifier(&mut self) {
+        while (self.peek().is_alphanumeric() || self.peek() == '_') && !self.is_at_end() {
+            self.advance();
+        }
+        let text = &self.source[self.start..self.current];
+        let token_type = TokenType::from_keyword(text).unwrap_or(TokenType::Identifier);
+        self.add_token(token_type, None);
     }
 
     fn eat_number(&mut self) {

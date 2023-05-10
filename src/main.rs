@@ -144,17 +144,6 @@ impl TokenType {
             _ => None,
         }
     }
-
-    fn is_literal(&self) -> bool {
-        match self {
-            TokenType::String
-            | TokenType::Number
-            | TokenType::True
-            | TokenType::False
-            | TokenType::Nil => true,
-            _ => false,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -236,7 +225,7 @@ impl<'source> Scanner<'source> {
 
     // TODO: Add support for multiline comments
     fn scan_token(&mut self) {
-        match (self.advance()) {
+        match self.advance() {
             '(' => self.add_token(TokenType::LeftParen, None),
             ')' => self.add_token(TokenType::RightParen, None),
             '{' => self.add_token(TokenType::LeftBrace, None),
@@ -340,10 +329,7 @@ impl<'source> Scanner<'source> {
     }
 
     fn add_error(&mut self, message: String) {
-        let error = LexerError {
-            line: self.line,
-            message,
-        };
+        let error = LexerError::new(self.line, message);
         self.errors.push(error);
     }
 

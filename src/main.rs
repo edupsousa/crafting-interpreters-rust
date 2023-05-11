@@ -3,15 +3,16 @@ use std::{error, fmt, fs, io};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    let mut program = Program::new();
     match args.len() {
         1 => {
             println!("Prompt mode");
-            run_prompt();
+            program.run_prompt();
         }
         2 => {
             let path = &args[1];
             println!("Input file: {}", path);
-            run_file(path);
+            program.run_file(path);
         }
         _ => {
             println!("Usage: {} [path]", args[0]);
@@ -19,40 +20,57 @@ fn main() {
     }
 }
 
-fn run_file(path: &str) {
-    let file = fs::read_to_string(path).expect("Failed to read file");
-    run(file.as_str());
+struct Program {
+    interpreter: Interpreter,
+    show_ast: bool,
 }
 
-fn run_prompt() {
-    loop {
-        print!("> ");
-        let _ = io::stdout().flush();
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read line");
-        if input.trim().is_empty() {
-            break;
-        }
-        run(input.as_str());
-    }
-}
-
-fn run(source: &str) {
-    let mut scanner = Scanner::new(source);
-    scanner.scan_tokens();
-
-    if scanner.has_errors() {
-        for error in scanner.errors {
-            println!("{}", error);
+impl Program {
+    fn new() -> Self {
+        Self {
+            interpreter: Interpreter::new(),
+            show_ast: false,
         }
     }
 
-    let mut parser = Parser::new(scanner.tokens);
-    let expression = parser.parse();
-    let mut printer = AstPrinter::new();
-    println!("{}", printer.print(&expression));
+    fn run_file(&mut self, path: &str) {
+        let file = fs::read_to_string(path).expect("Failed to read file");
+        self.run(file.as_str());
+    }
+
+    fn run_prompt(&mut self) {
+        loop {
+            print!("> ");
+            let _ = io::stdout().flush();
+            let mut input = String::new();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read line");
+            if input.trim().is_empty() {
+                break;
+            }
+            self.run(input.as_str());
+        }
+    }
+
+    fn run(&mut self, source: &str) {
+        let mut scanner = Scanner::new(source);
+        scanner.scan_tokens();
+
+        if scanner.has_errors() {
+            for error in scanner.errors {
+                println!("{}", error);
+            }
+        }
+
+        let mut parser = Parser::new(scanner.tokens);
+        let expression = parser.parse();
+        if self.show_ast {
+            let mut printer = AstPrinter::new();
+            println!("{}", printer.print(&expression));
+        }
+        self.interpreter.interpret(&expression);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -424,12 +442,23 @@ impl GroupingExpr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum LiteralValue {
     Number(f64),
     String(String),
     Boolean(bool),
     Nil,
+}
+
+impl fmt::Display for LiteralValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Number(value) => write!(f, "{}", value),
+            Self::String(value) => write!(f, "{}", value),
+            Self::Boolean(value) => write!(f, "{}", value),
+            Self::Nil => write!(f, "nil"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -733,36 +762,164 @@ impl fmt::Display for ParserError {
 
 type ParserResult = Result<Expr, ParserError>;
 
-struct Interpreter {}
-
-impl Interpreter {
-    fn evaluate(&mut self, expr: &Expr) -> LiteralValue {
-        expr.accept(self)
-    }
+struct Interpreter {
+    had_error: bool,
 }
 
-impl Visitor<LiteralValue> Interpreter {
-    fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> LiteralValue {
-        expr.value.clone()
+impl Interpreter {
+    fn new() -> Self {
+        Self { had_error: false }
     }
 
-    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> LiteralValue {
-        self.evaluate(&expr.expression)
+    fn interpret(&mut self, expr: &Expr) {
+        match self.evaluate(expr) {
+            Ok(value) => println!("{}", value),
+            Err(e) => {
+                self.had_error = true;
+                println!("{}", e);
+            }
+        }
     }
 
-    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> LiteralValue {
-        let right = self.evaluate(&expr.right);
+    fn evaluate(&mut self, expr: &Expr) -> RuntimeResult {
+        expr.accept(self)
+    }
 
-        match expr.operator.token_type {
-            TokenType::Minus => match right {
-                LiteralValue::Number(n) => LiteralValue::Number(-n),
-                _ => panic!("Operand must be a number."),
-            },
-            TokenType::Bang => match right {
-                LiteralValue::Boolean(b) => LiteralValue::Boolean(!b),
-                _ => panic!("Operand must be a boolean."),
-            },
-            _ => panic!("Unknown unary operator."),
+    fn is_truthy(&self, value: &LiteralValue) -> bool {
+        match value {
+            LiteralValue::Nil => false,
+            LiteralValue::Boolean(b) => *b,
+            _ => true,
         }
     }
 }
+
+impl Visitor<RuntimeResult> for Interpreter {
+    fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> RuntimeResult {
+        Ok(expr.value.clone())
+    }
+
+    fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> RuntimeResult {
+        let value = self.evaluate(&expr.expression)?;
+        Ok(value)
+    }
+
+    fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> RuntimeResult {
+        let right = self.evaluate(&expr.right)?;
+
+        match expr.operator.token_type {
+            TokenType::Bang => Ok(LiteralValue::Boolean(!self.is_truthy(&right))),
+            TokenType::Minus => match right {
+                LiteralValue::Number(n) => Ok(LiteralValue::Number(-n)),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operand must be a number.".to_string(),
+                )),
+            },
+            _ => Err(RuntimeError::new(
+                expr.operator.clone(),
+                "Unknown unary operator.".to_string(),
+            )),
+        }
+    }
+
+    fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> RuntimeResult {
+        use LiteralValue::*;
+
+        let left = self.evaluate(&expr.left)?;
+        let right = self.evaluate(&expr.right)?;
+
+        match expr.operator.token_type {
+            TokenType::Minus => match (left, right) {
+                (Number(l), Number(r)) => Ok(Number(l - r)),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operands must be numbers.".to_string(),
+                )),
+            },
+            TokenType::Slash => match (left, right) {
+                (Number(l), Number(r)) => Ok(Number(l / r)),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operands must be numbers.".to_string(),
+                )),
+            },
+            TokenType::Star => match (left, right) {
+                (Number(l), Number(r)) => Ok(Number(l * r)),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operands must be numbers.".to_string(),
+                )),
+            },
+            TokenType::Plus => match (left, right) {
+                (Number(l), Number(r)) => Ok(Number(l + r)),
+                (String(l), String(r)) => Ok(String(l + &r)),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operands must be two numbers or two strings.".to_string(),
+                )),
+            },
+            TokenType::Greater => match (left, right) {
+                (Number(l), Number(r)) => Ok(Boolean(l > r)),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operands must be numbers.".to_string(),
+                )),
+            },
+            TokenType::GreaterEqual => match (left, right) {
+                (Number(l), Number(r)) => Ok(Boolean(l >= r)),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operands must be numbers.".to_string(),
+                )),
+            },
+            TokenType::Less => match (left, right) {
+                (Number(l), Number(r)) => Ok(Boolean(l < r)),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operands must be numbers.".to_string(),
+                )),
+            },
+            TokenType::LessEqual => match (left, right) {
+                (Number(l), Number(r)) => Ok(Boolean(l <= r)),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operands must be numbers.".to_string(),
+                )),
+            },
+            TokenType::BangEqual => Ok(Boolean(left != right)),
+            TokenType::EqualEqual => Ok(Boolean(left == right)),
+            _ => Err(RuntimeError::new(
+                expr.operator.clone(),
+                "Unknown binary operator.".to_string(),
+            )),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct RuntimeError {
+    token: Token,
+    message: String,
+}
+
+impl RuntimeError {
+    fn new(token: Token, message: String) -> Self {
+        Self { token, message }
+    }
+}
+
+impl error::Error for RuntimeError {}
+
+impl fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[line {}] Error", self.token.line)?;
+        match &self.token.token_type {
+            TokenType::Eof => write!(f, " at end")?,
+            _ => write!(f, " at '{}'", self.token.lexeme)?,
+        }
+        write!(f, ": {}", self.message)
+    }
+}
+
+type RuntimeResult = Result<LiteralValue, RuntimeError>;

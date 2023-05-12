@@ -146,12 +146,12 @@ impl Parser {
         if self.match_next(vec![TokenType::Number, TokenType::String]) {
             let value = self.previous().literal.unwrap();
             match value {
-                LiteralNode::Number(n) => {
+                TokenLiteral::Number(n) => {
                     return Ok(Expr::Literal(Box::new(LiteralExpr::new(
                         LiteralValue::Number(n),
                     ))))
                 }
-                LiteralNode::String(s) => {
+                TokenLiteral::String(s) => {
                     return Ok(Expr::Literal(Box::new(LiteralExpr::new(
                         LiteralValue::String(s),
                     ))));

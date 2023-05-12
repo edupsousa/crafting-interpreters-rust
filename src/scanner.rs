@@ -1,6 +1,6 @@
 use std::{error, fmt};
 
-use crate::tokens::{LiteralNode, Token, TokenType};
+use crate::tokens::{Token, TokenLiteral, TokenType};
 
 #[derive(Debug, Clone)]
 pub struct Scanner<'source> {
@@ -95,7 +95,7 @@ impl<'source> Scanner<'source> {
         let value = self.source[self.start..self.current]
             .parse::<f64>()
             .unwrap();
-        self.add_token(TokenType::Number, LiteralNode::some_number(value));
+        self.add_token(TokenType::Number, TokenLiteral::some_number(value));
     }
 
     fn peek_next(&self) -> char {
@@ -114,7 +114,7 @@ impl<'source> Scanner<'source> {
         }
         self.advance();
         let value = self.source[self.start + 1..self.current - 1].to_string();
-        self.add_token(TokenType::String, LiteralNode::some_string(value));
+        self.add_token(TokenType::String, TokenLiteral::some_string(value));
     }
 
     fn advance_to_char_ml(&mut self, expected: char) {
@@ -150,7 +150,7 @@ impl<'source> Scanner<'source> {
         self.errors.push(error);
     }
 
-    fn add_token(&mut self, token_type: TokenType, literal: Option<LiteralNode>) {
+    fn add_token(&mut self, token_type: TokenType, literal: Option<TokenLiteral>) {
         let token = Token::new(
             token_type,
             self.source[self.start..self.current].to_string(),

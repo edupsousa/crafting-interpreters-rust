@@ -70,12 +70,12 @@ impl TokenType {
 }
 
 #[derive(Debug, Clone)]
-pub enum LiteralNode {
+pub enum TokenLiteral {
     String(String),
     Number(f64),
 }
 
-impl LiteralNode {
+impl TokenLiteral {
     pub fn some_string(string: String) -> Option<Self> {
         Some(Self::String(string))
     }
@@ -88,7 +88,7 @@ impl LiteralNode {
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
-    pub literal: Option<LiteralNode>,
+    pub literal: Option<TokenLiteral>,
     pub line: usize,
 }
 
@@ -96,7 +96,7 @@ impl Token {
     pub fn new(
         token_type: TokenType,
         lexeme: String,
-        literal: Option<LiteralNode>,
+        literal: Option<TokenLiteral>,
         line: usize,
     ) -> Self {
         Self {

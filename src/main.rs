@@ -64,12 +64,12 @@ impl Program {
         }
 
         let mut parser = Parser::new(scanner.tokens);
-        let expression = parser.parse();
+        let statements = parser.parse();
         if self.show_ast {
             let mut printer = AstPrinter::new();
-            println!("{}", printer.print(&expression));
+            println!("{}", printer.print_statements(&statements));
         }
-        self.interpreter.interpret(&expression);
+        self.interpreter.interpret(&statements);
     }
 }
 
@@ -497,6 +497,8 @@ trait Visitor<T> {
     fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> T;
     fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> T;
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> T;
+    fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> T;
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> T;
 }
 
 struct AstPrinter;
@@ -506,7 +508,19 @@ impl AstPrinter {
         Self {}
     }
 
-    fn print(&mut self, expr: &Expr) -> String {
+    fn print_statements(&mut self, statements: &[Stmt]) -> String {
+        let mut result = String::new();
+        for statement in statements {
+            result.push_str(&self.print_stmt(statement));
+        }
+        result
+    }
+
+    fn print_stmt(&mut self, stmt: &Stmt) -> String {
+        stmt.accept(self)
+    }
+
+    fn print_expr(&mut self, expr: &Expr) -> String {
         expr.accept(self)
     }
 }
@@ -516,13 +530,13 @@ impl Visitor<String> for AstPrinter {
         format!(
             "({} {} {})",
             expr.operator.lexeme,
-            self.print(&expr.left),
-            self.print(&expr.right)
+            self.print_expr(&expr.left),
+            self.print_expr(&expr.right)
         )
     }
 
     fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> String {
-        format!("(group {})", self.print(&expr.expression))
+        format!("(group {})", self.print_expr(&expr.expression))
     }
 
     fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> String {
@@ -535,7 +549,19 @@ impl Visitor<String> for AstPrinter {
     }
 
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> String {
-        format!("({} {})", expr.operator.lexeme, self.print(&expr.right))
+        format!(
+            "({} {})",
+            expr.operator.lexeme,
+            self.print_expr(&expr.right)
+        )
+    }
+
+    fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> String {
+        self.print_expr(&stmt.expression)
+    }
+
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> String {
+        self.print_expr(&stmt.expression)
     }
 }
 
@@ -585,18 +611,24 @@ impl Parser {
         self.tokens[self.current - 1].clone()
     }
 
-    fn parse(&mut self) -> Expr {
-        match self.expression() {
-            Ok(expr) => expr,
-            Err(_) => Expr::Literal(Box::new(LiteralExpr::new(LiteralValue::Nil))),
+    fn parse(&mut self) -> Vec<Stmt> {
+        let mut statements: Vec<Stmt> = vec![];
+        while !self.is_at_end() {
+            match self.statement() {
+                Ok(stmt) => statements.push(stmt),
+                Err(_) => {
+                    panic!("Error parsing statement {:?}", self.peek());
+                }
+            }
         }
+        statements
     }
 
-    fn expression(&mut self) -> ParserResult {
+    fn expression(&mut self) -> ExprParseResult {
         self.equality()
     }
 
-    fn equality(&mut self) -> ParserResult {
+    fn equality(&mut self) -> ExprParseResult {
         let mut expr = self.comparison()?;
 
         while self.match_next(vec![TokenType::BangEqual, TokenType::EqualEqual]) {
@@ -608,7 +640,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> ParserResult {
+    fn comparison(&mut self) -> ExprParseResult {
         let mut expr = self.term()?;
 
         while self.match_next(vec![
@@ -625,7 +657,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn term(&mut self) -> ParserResult {
+    fn term(&mut self) -> ExprParseResult {
         let mut expr = self.factor()?;
 
         while self.match_next(vec![TokenType::Minus, TokenType::Plus]) {
@@ -637,7 +669,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn factor(&mut self) -> ParserResult {
+    fn factor(&mut self) -> ExprParseResult {
         let mut expr = self.unary()?;
 
         while self.match_next(vec![TokenType::Slash, TokenType::Star]) {
@@ -649,7 +681,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> ParserResult {
+    fn unary(&mut self) -> ExprParseResult {
         if self.match_next(vec![TokenType::Bang, TokenType::Minus]) {
             let operator = self.previous();
             let right = self.unary()?;
@@ -659,7 +691,7 @@ impl Parser {
         self.primary()
     }
 
-    fn primary(&mut self) -> ParserResult {
+    fn primary(&mut self) -> ExprParseResult {
         if self.match_next(vec![TokenType::False]) {
             return Ok(Expr::Literal(Box::new(LiteralExpr::new(
                 LiteralValue::Boolean(false),
@@ -733,6 +765,26 @@ impl Parser {
             self.advance();
         }
     }
+
+    fn statement(&mut self) -> StmtParseResult {
+        if self.match_next(vec![TokenType::Print]) {
+            self.print_statement()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn print_statement(&mut self) -> StmtParseResult {
+        let value = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
+        Ok(Stmt::Print(Box::new(PrintStmt::new(value))))
+    }
+
+    fn expression_statement(&mut self) -> StmtParseResult {
+        let expr = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
+        Ok(Stmt::Expression(Box::new(ExpressionStmt::new(expr))))
+    }
 }
 
 #[derive(Debug)]
@@ -760,7 +812,8 @@ impl fmt::Display for ParserError {
     }
 }
 
-type ParserResult = Result<Expr, ParserError>;
+type ExprParseResult = Result<Expr, ParserError>;
+type StmtParseResult = Result<Stmt, ParserError>;
 
 struct Interpreter {
     had_error: bool,
@@ -771,14 +824,20 @@ impl Interpreter {
         Self { had_error: false }
     }
 
-    fn interpret(&mut self, expr: &Expr) {
-        match self.evaluate(expr) {
-            Ok(value) => println!("{}", value),
-            Err(e) => {
-                self.had_error = true;
-                println!("{}", e);
+    fn interpret(&mut self, statements: &[Stmt]) {
+        for statement in statements {
+            match self.execute(statement) {
+                Ok(value) => println!("{}", value),
+                Err(e) => {
+                    self.had_error = true;
+                    println!("{}", e);
+                }
             }
         }
+    }
+
+    fn execute(&mut self, stmt: &Stmt) -> RuntimeResult {
+        stmt.accept(self)
     }
 
     fn evaluate(&mut self, expr: &Expr) -> RuntimeResult {
@@ -895,6 +954,17 @@ impl Visitor<RuntimeResult> for Interpreter {
             )),
         }
     }
+
+    fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> RuntimeResult {
+        self.evaluate(&stmt.expression)?;
+        Ok(LiteralValue::Nil)
+    }
+
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> RuntimeResult {
+        let value = self.evaluate(&stmt.expression)?;
+        println!("{}", value);
+        Ok(LiteralValue::Nil)
+    }
 }
 
 #[derive(Debug)]
@@ -923,3 +993,40 @@ impl fmt::Display for RuntimeError {
 }
 
 type RuntimeResult = Result<LiteralValue, RuntimeError>;
+
+#[derive(Debug, Clone)]
+enum Stmt {
+    Expression(Box<ExpressionStmt>),
+    Print(Box<PrintStmt>),
+}
+
+impl Stmt {
+    fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
+        match self {
+            Stmt::Expression(stmt) => visitor.visit_expression_stmt(stmt),
+            Stmt::Print(stmt) => visitor.visit_print_stmt(stmt),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ExpressionStmt {
+    expression: Expr,
+}
+
+impl ExpressionStmt {
+    fn new(expression: Expr) -> Self {
+        Self { expression }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PrintStmt {
+    expression: Expr,
+}
+
+impl PrintStmt {
+    fn new(expression: Expr) -> Self {
+        Self { expression }
+    }
+}

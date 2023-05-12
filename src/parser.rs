@@ -1,0 +1,253 @@
+use std::{error, fmt};
+
+use crate::{ast::*, tokens::*};
+
+pub struct Parser {
+    tokens: Vec<Token>,
+    current: usize,
+}
+
+impl Parser {
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Self { tokens, current: 0 }
+    }
+
+    fn match_next(&mut self, types: Vec<TokenType>) -> bool {
+        for token_type in types {
+            if self.check(token_type) {
+                self.advance();
+                return true;
+            }
+        }
+        false
+    }
+
+    fn check(&self, token_type: TokenType) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+        self.peek().token_type == token_type
+    }
+
+    fn advance(&mut self) -> Token {
+        if !self.is_at_end() {
+            self.current += 1;
+        }
+        self.previous()
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.peek().token_type == TokenType::Eof
+    }
+
+    fn peek(&self) -> Token {
+        self.tokens[self.current].clone()
+    }
+
+    fn previous(&self) -> Token {
+        self.tokens[self.current - 1].clone()
+    }
+
+    pub fn parse(&mut self) -> Vec<Stmt> {
+        let mut statements: Vec<Stmt> = vec![];
+        while !self.is_at_end() {
+            match self.statement() {
+                Ok(stmt) => statements.push(stmt),
+                Err(_) => {
+                    panic!("Error parsing statement {:?}", self.peek());
+                }
+            }
+        }
+        statements
+    }
+
+    fn expression(&mut self) -> ExprParseResult {
+        self.equality()
+    }
+
+    fn equality(&mut self) -> ExprParseResult {
+        let mut expr = self.comparison()?;
+
+        while self.match_next(vec![TokenType::BangEqual, TokenType::EqualEqual]) {
+            let operator = self.previous();
+            let right = self.comparison()?;
+            expr = Expr::Binary(Box::new(BinaryExpr::new(expr, operator, right)));
+        }
+
+        Ok(expr)
+    }
+
+    fn comparison(&mut self) -> ExprParseResult {
+        let mut expr = self.term()?;
+
+        while self.match_next(vec![
+            TokenType::Greater,
+            TokenType::GreaterEqual,
+            TokenType::Less,
+            TokenType::LessEqual,
+        ]) {
+            let operator = self.previous();
+            let right = self.term()?;
+            expr = Expr::Binary(Box::new(BinaryExpr::new(expr, operator, right)));
+        }
+
+        Ok(expr)
+    }
+
+    fn term(&mut self) -> ExprParseResult {
+        let mut expr = self.factor()?;
+
+        while self.match_next(vec![TokenType::Minus, TokenType::Plus]) {
+            let operator = self.previous();
+            let right = self.factor()?;
+            expr = Expr::Binary(Box::new(BinaryExpr::new(expr, operator, right)));
+        }
+
+        Ok(expr)
+    }
+
+    fn factor(&mut self) -> ExprParseResult {
+        let mut expr = self.unary()?;
+
+        while self.match_next(vec![TokenType::Slash, TokenType::Star]) {
+            let operator = self.previous();
+            let right = self.unary()?;
+            expr = Expr::Binary(Box::new(BinaryExpr::new(expr, operator, right)));
+        }
+
+        Ok(expr)
+    }
+
+    fn unary(&mut self) -> ExprParseResult {
+        if self.match_next(vec![TokenType::Bang, TokenType::Minus]) {
+            let operator = self.previous();
+            let right = self.unary()?;
+            return Ok(Expr::Unary(Box::new(UnaryExpr::new(operator, right))));
+        }
+
+        self.primary()
+    }
+
+    fn primary(&mut self) -> ExprParseResult {
+        if self.match_next(vec![TokenType::False]) {
+            return Ok(Expr::Literal(Box::new(LiteralExpr::new(
+                LiteralValue::Boolean(false),
+            ))));
+        }
+        if self.match_next(vec![TokenType::True]) {
+            return Ok(Expr::Literal(Box::new(LiteralExpr::new(
+                LiteralValue::Boolean(true),
+            ))));
+        }
+        if self.match_next(vec![TokenType::Nil]) {
+            return Ok(Expr::Literal(Box::new(LiteralExpr::new(LiteralValue::Nil))));
+        }
+
+        if self.match_next(vec![TokenType::Number, TokenType::String]) {
+            let value = self.previous().literal.unwrap();
+            match value {
+                LiteralNode::Number(n) => {
+                    return Ok(Expr::Literal(Box::new(LiteralExpr::new(
+                        LiteralValue::Number(n),
+                    ))))
+                }
+                LiteralNode::String(s) => {
+                    return Ok(Expr::Literal(Box::new(LiteralExpr::new(
+                        LiteralValue::String(s),
+                    ))));
+                }
+            }
+        }
+
+        if self.match_next(vec![TokenType::LeftParen]) {
+            let expr = self.expression()?;
+            self.consume(TokenType::RightParen, "Expect ')' after expression.")?;
+            return Ok(Expr::Grouping(Box::new(GroupingExpr::new(expr))));
+        }
+
+        Err(ParserError {
+            token: self.peek(),
+            message: "Expect expression.".to_string(),
+        })
+    }
+
+    fn consume(&mut self, token_type: TokenType, message: &str) -> Result<Token, ParserError> {
+        if self.check(token_type) {
+            return Ok(self.advance());
+        }
+
+        Err(ParserError::new(self.peek(), message.to_string()))
+    }
+
+    // fn synchronize(&mut self) {
+    //     self.advance();
+
+    //     while !self.is_at_end() {
+    //         if self.previous().token_type == TokenType::Semicolon {
+    //             return;
+    //         }
+
+    //         match self.peek().token_type {
+    //             TokenType::Class
+    //             | TokenType::Fun
+    //             | TokenType::Var
+    //             | TokenType::For
+    //             | TokenType::If
+    //             | TokenType::While
+    //             | TokenType::Print
+    //             | TokenType::Return => return,
+    //             _ => {}
+    //         }
+
+    //         self.advance();
+    //     }
+    // }
+
+    fn statement(&mut self) -> StmtParseResult {
+        if self.match_next(vec![TokenType::Print]) {
+            self.print_statement()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn print_statement(&mut self) -> StmtParseResult {
+        let value = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
+        Ok(Stmt::Print(Box::new(PrintStmt::new(value))))
+    }
+
+    fn expression_statement(&mut self) -> StmtParseResult {
+        let expr = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
+        Ok(Stmt::Expression(Box::new(ExpressionStmt::new(expr))))
+    }
+}
+
+#[derive(Debug)]
+struct ParserError {
+    token: Token,
+    message: String,
+}
+
+impl ParserError {
+    fn new(token: Token, message: String) -> Self {
+        Self { token, message }
+    }
+}
+
+impl error::Error for ParserError {}
+
+impl fmt::Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[line {}] Error", self.token.line)?;
+        match &self.token.token_type {
+            TokenType::Eof => write!(f, " at end")?,
+            _ => write!(f, " at '{}'", self.token.lexeme)?,
+        }
+        write!(f, ": {}", self.message)
+    }
+}
+
+type ExprParseResult = Result<Expr, ParserError>;
+type StmtParseResult = Result<Stmt, ParserError>;

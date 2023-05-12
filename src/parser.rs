@@ -53,8 +53,8 @@ impl Parser {
         while !self.is_at_end() {
             match self.statement() {
                 Ok(stmt) => statements.push(stmt),
-                Err(_) => {
-                    panic!("Error parsing statement {:?}", self.peek());
+                Err(error) => {
+                    println!("{}", error);
                 }
             }
         }

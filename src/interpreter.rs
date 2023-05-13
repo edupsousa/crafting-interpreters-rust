@@ -42,6 +42,21 @@ impl Interpreter {
             _ => true,
         }
     }
+
+    fn execute_block(&mut self, statements: &[Stmt]) -> RuntimeResult {
+        self.environment.new_scope();
+        for statement in statements {
+            match self.execute(statement) {
+                Ok(_) => (),
+                Err(e) => {
+                    self.environment.pop_scope();
+                    return Err(e);
+                }
+            }
+        }
+        self.environment.pop_scope();
+        Ok(LiteralValue::Nil)
+    }
 }
 
 impl Visitor<RuntimeResult> for Interpreter {
@@ -176,6 +191,11 @@ impl Visitor<RuntimeResult> for Interpreter {
         self.environment.assign(&expr.name, value.clone())?;
         Ok(value)
     }
+
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> RuntimeResult {
+        self.execute_block(&stmt.statements)?;
+        Ok(LiteralValue::Nil)
+    }
 }
 
 #[derive(Debug)]
@@ -207,40 +227,54 @@ type RuntimeResult = Result<LiteralValue, RuntimeError>;
 
 #[derive(Debug, Clone)]
 struct Environment {
-    values: HashMap<String, LiteralValue>,
+    stores: Vec<HashMap<String, LiteralValue>>,
 }
 
 impl Environment {
     fn new() -> Self {
         Self {
-            values: HashMap::new(),
+            stores: vec![HashMap::new()],
         }
+    }
+
+    fn new_scope(&mut self) {
+        self.stores.push(HashMap::new());
+    }
+
+    fn pop_scope(&mut self) {
+        self.stores.pop();
+    }
+
+    fn top_scope(&mut self) -> &mut HashMap<String, LiteralValue> {
+        self.stores.last_mut().unwrap()
     }
 
     fn define(&mut self, name: &str, value: LiteralValue) {
-        self.values.insert(name.to_string(), value);
+        self.top_scope().insert(name.to_string(), value);
     }
 
     fn get(&self, token: &Token) -> RuntimeResult {
-        match self.values.get(&token.lexeme) {
-            Some(value) => Ok(value.clone()),
-            None => Err(RuntimeError::new(
-                token.clone(),
-                format!("Undefined variable '{}'.", token.lexeme),
-            )),
+        for scope in self.stores.iter().rev() {
+            if let Some(value) = scope.get(&token.lexeme) {
+                return Ok(value.clone());
+            }
         }
+        Err(RuntimeError::new(
+            token.clone(),
+            format!("Undefined variable '{}'.", token.lexeme),
+        ))
     }
 
     fn assign(&mut self, token: &Token, value: LiteralValue) -> RuntimeResult {
-        match self.values.get_mut(&token.lexeme) {
-            Some(v) => {
-                *v = value;
-                Ok(LiteralValue::Nil)
+        for scope in self.stores.iter_mut().rev() {
+            if scope.contains_key(&token.lexeme) {
+                scope.insert(token.lexeme.clone(), value.clone());
+                return Ok(value);
             }
-            None => Err(RuntimeError::new(
-                token.clone(),
-                format!("Undefined variable '{}'.", token.lexeme),
-            )),
         }
+        Err(RuntimeError::new(
+            token.clone(),
+            format!("Undefined variable '{}'.", token.lexeme),
+        ))
     }
 }

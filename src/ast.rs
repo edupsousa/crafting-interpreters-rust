@@ -16,12 +16,12 @@ pub enum Expr {
 impl Expr {
     pub fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
         match self {
-            Self::Binary(expr) => expr.accept(visitor),
-            Self::Grouping(expr) => expr.accept(visitor),
-            Self::Literal(expr) => expr.accept(visitor),
-            Self::Unary(expr) => expr.accept(visitor),
-            Self::Variable(expr) => expr.accept(visitor),
-            Self::Assignment(expr) => expr.accept(visitor),
+            Self::Binary(expr) => visitor.visit_binary_expr(expr),
+            Self::Grouping(expr) => visitor.visit_grouping_expr(expr),
+            Self::Literal(expr) => visitor.visit_literal_expr(expr),
+            Self::Unary(expr) => visitor.visit_unary_expr(expr),
+            Self::Variable(expr) => visitor.visit_variable_expr(expr),
+            Self::Assignment(expr) => visitor.visit_assign_expr(expr),
         }
     }
 }
@@ -36,10 +36,6 @@ impl AssignExpr {
     pub fn new(name: Token, value: Expr) -> Self {
         Self { name, value }
     }
-
-    fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
-        visitor.visit_assign_expr(self)
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -50,10 +46,6 @@ pub struct VariableExpr {
 impl VariableExpr {
     pub fn new(name: Token) -> Self {
         Self { name }
-    }
-
-    fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
-        visitor.visit_variable_expr(self)
     }
 }
 
@@ -72,10 +64,6 @@ impl BinaryExpr {
             right,
         }
     }
-
-    fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
-        visitor.visit_binary_expr(self)
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -86,10 +74,6 @@ pub struct GroupingExpr {
 impl GroupingExpr {
     pub fn new(expression: Expr) -> Self {
         Self { expression }
-    }
-
-    fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
-        visitor.visit_grouping_expr(self)
     }
 }
 
@@ -121,10 +105,6 @@ impl LiteralExpr {
     pub fn new(value: LiteralValue) -> Self {
         Self { value }
     }
-
-    fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
-        visitor.visit_literal_expr(self)
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -137,10 +117,6 @@ impl UnaryExpr {
     pub fn new(operator: Token, right: Expr) -> Self {
         Self { operator, right }
     }
-
-    fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
-        visitor.visit_unary_expr(self)
-    }
 }
 
 // Statements
@@ -150,6 +126,7 @@ pub enum Stmt {
     Expression(Box<ExpressionStmt>),
     Print(Box<PrintStmt>),
     Var(Box<VarStmt>),
+    Block(Box<BlockStmt>),
 }
 
 impl Stmt {
@@ -158,7 +135,19 @@ impl Stmt {
             Stmt::Expression(stmt) => visitor.visit_expression_stmt(stmt),
             Stmt::Print(stmt) => visitor.visit_print_stmt(stmt),
             Stmt::Var(stmt) => visitor.visit_var_stmt(stmt),
+            Stmt::Block(stmt) => visitor.visit_block_stmt(stmt),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BlockStmt {
+    pub statements: Vec<Stmt>,
+}
+
+impl BlockStmt {
+    pub fn new(statements: Vec<Stmt>) -> Self {
+        Self { statements }
     }
 }
 
@@ -208,4 +197,5 @@ pub trait Visitor<T> {
     fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> T;
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> T;
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> T;
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> T;
 }

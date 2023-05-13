@@ -77,4 +77,12 @@ impl Visitor<String> for AstPrinter {
     fn visit_assign_expr(&mut self, expr: &AssignExpr) -> String {
         format!("(= {} {})", expr.name.lexeme, self.print_expr(&expr.value))
     }
+
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> String {
+        let mut result = String::new();
+        for statement in &stmt.statements {
+            result.push_str(&self.print_stmt(statement));
+        }
+        result
+    }
 }

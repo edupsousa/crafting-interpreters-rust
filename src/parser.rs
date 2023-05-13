@@ -232,12 +232,29 @@ impl Parser {
         }
     }
 
+    fn stmt_list_block(&mut self) -> Result<Vec<Stmt>, ParserError> {
+        let mut statements = Vec::new();
+
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
+        Ok(statements)
+    }
+
+    fn block(&mut self) -> StmtParseResult {
+        let statements = self.stmt_list_block()?;
+        Ok(Stmt::Block(Box::new(BlockStmt::new(statements))))
+    }
+
     fn statement(&mut self) -> StmtParseResult {
         if self.match_next(vec![TokenType::Print]) {
-            self.print_statement()
-        } else {
-            self.expression_statement()
+            return self.print_statement();
         }
+        if self.match_next(vec![TokenType::LeftBrace]) {
+            return self.block();
+        }
+        self.expression_statement()
     }
 
     fn print_statement(&mut self) -> StmtParseResult {

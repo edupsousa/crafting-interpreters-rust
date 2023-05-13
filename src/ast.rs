@@ -9,6 +9,7 @@ pub enum Expr {
     Grouping(Box<GroupingExpr>),
     Literal(Box<LiteralExpr>),
     Unary(Box<UnaryExpr>),
+    Variable(Box<VariableExpr>),
 }
 
 impl Expr {
@@ -18,7 +19,23 @@ impl Expr {
             Self::Grouping(expr) => expr.accept(visitor),
             Self::Literal(expr) => expr.accept(visitor),
             Self::Unary(expr) => expr.accept(visitor),
+            Self::Variable(expr) => expr.accept(visitor),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VariableExpr {
+    pub name: Token,
+}
+
+impl VariableExpr {
+    pub fn new(name: Token) -> Self {
+        Self { name }
+    }
+
+    fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
+        visitor.visit_variable_expr(self)
     }
 }
 
@@ -114,6 +131,7 @@ impl UnaryExpr {
 pub enum Stmt {
     Expression(Box<ExpressionStmt>),
     Print(Box<PrintStmt>),
+    Var(Box<VarStmt>),
 }
 
 impl Stmt {
@@ -121,6 +139,7 @@ impl Stmt {
         match self {
             Stmt::Expression(stmt) => visitor.visit_expression_stmt(stmt),
             Stmt::Print(stmt) => visitor.visit_print_stmt(stmt),
+            Stmt::Var(stmt) => visitor.visit_var_stmt(stmt),
         }
     }
 }
@@ -147,11 +166,27 @@ impl PrintStmt {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct VarStmt {
+    pub name: Token,
+    pub initializer: Option<Expr>,
+}
+
+impl VarStmt {
+    pub fn new(name: Token, initializer: Option<Expr>) -> Self {
+        Self { name, initializer }
+    }
+}
+
 pub trait Visitor<T> {
+    // Expressions
     fn visit_binary_expr(&mut self, expr: &BinaryExpr) -> T;
     fn visit_grouping_expr(&mut self, expr: &GroupingExpr) -> T;
     fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> T;
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> T;
+    fn visit_variable_expr(&mut self, expr: &VariableExpr) -> T;
+    // Statements
     fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> T;
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> T;
+    fn visit_var_stmt(&mut self, stmt: &VarStmt) -> T;
 }

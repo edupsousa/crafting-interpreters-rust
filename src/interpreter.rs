@@ -1,14 +1,18 @@
-use std::{error, fmt};
+use std::{collections::HashMap, error, fmt};
 
 use crate::{ast::*, tokens::*};
 
 pub struct Interpreter {
     had_error: bool,
+    environment: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self { had_error: false }
+        Self {
+            had_error: false,
+            environment: Environment::new(),
+        }
     }
 
     pub fn interpret(&mut self, statements: &[Stmt]) {
@@ -152,6 +156,20 @@ impl Visitor<RuntimeResult> for Interpreter {
         println!("{}", value);
         Ok(LiteralValue::Nil)
     }
+
+    fn visit_var_stmt(&mut self, stmt: &VarStmt) -> RuntimeResult {
+        let value = match &stmt.initializer {
+            Some(expr) => self.evaluate(expr)?,
+            None => LiteralValue::Nil,
+        };
+
+        self.environment.define(stmt.name.lexeme.as_str(), value);
+        Ok(LiteralValue::Nil)
+    }
+
+    fn visit_variable_expr(&mut self, expr: &VariableExpr) -> RuntimeResult {
+        self.environment.get(&expr.name)
+    }
 }
 
 #[derive(Debug)]
@@ -180,3 +198,30 @@ impl fmt::Display for RuntimeError {
 }
 
 type RuntimeResult = Result<LiteralValue, RuntimeError>;
+
+#[derive(Debug, Clone)]
+struct Environment {
+    values: HashMap<String, LiteralValue>,
+}
+
+impl Environment {
+    fn new() -> Self {
+        Self {
+            values: HashMap::new(),
+        }
+    }
+
+    fn define(&mut self, name: &str, value: LiteralValue) {
+        self.values.insert(name.to_string(), value);
+    }
+
+    fn get(&self, token: &Token) -> RuntimeResult {
+        match self.values.get(&token.lexeme) {
+            Some(value) => Ok(value.clone()),
+            None => Err(RuntimeError::new(
+                token.clone(),
+                format!("Undefined variable '{}'.", token.lexeme),
+            )),
+        }
+    }
+}

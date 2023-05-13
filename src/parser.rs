@@ -51,10 +51,11 @@ impl Parser {
     pub fn parse(&mut self) -> Vec<Stmt> {
         let mut statements: Vec<Stmt> = vec![];
         while !self.is_at_end() {
-            match self.statement() {
+            match self.declaration() {
                 Ok(stmt) => statements.push(stmt),
                 Err(error) => {
                     println!("{}", error);
+                    self.synchronize();
                 }
             }
         }
@@ -159,6 +160,10 @@ impl Parser {
             }
         }
 
+        if self.match_next(vec![TokenType::Identifier]) {
+            return Ok(Expr::Variable(Box::new(VariableExpr::new(self.previous()))));
+        }
+
         if self.match_next(vec![TokenType::LeftParen]) {
             let expr = self.expression()?;
             self.consume(TokenType::RightParen, "Expect ')' after expression.")?;
@@ -179,29 +184,29 @@ impl Parser {
         Err(ParserError::new(self.peek(), message.to_string()))
     }
 
-    // fn synchronize(&mut self) {
-    //     self.advance();
+    fn synchronize(&mut self) {
+        self.advance();
 
-    //     while !self.is_at_end() {
-    //         if self.previous().token_type == TokenType::Semicolon {
-    //             return;
-    //         }
+        while !self.is_at_end() {
+            if self.previous().token_type == TokenType::Semicolon {
+                return;
+            }
 
-    //         match self.peek().token_type {
-    //             TokenType::Class
-    //             | TokenType::Fun
-    //             | TokenType::Var
-    //             | TokenType::For
-    //             | TokenType::If
-    //             | TokenType::While
-    //             | TokenType::Print
-    //             | TokenType::Return => return,
-    //             _ => {}
-    //         }
+            match self.peek().token_type {
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => return,
+                _ => {}
+            }
 
-    //         self.advance();
-    //     }
-    // }
+            self.advance();
+        }
+    }
 
     fn statement(&mut self) -> StmtParseResult {
         if self.match_next(vec![TokenType::Print]) {
@@ -221,6 +226,31 @@ impl Parser {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
         Ok(Stmt::Expression(Box::new(ExpressionStmt::new(expr))))
+    }
+
+    fn declaration(&mut self) -> StmtParseResult {
+        if self.match_next(vec![TokenType::Var]) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn var_declaration(&mut self) -> StmtParseResult {
+        let name = self.consume(TokenType::Identifier, "Expect variable name.")?;
+
+        let initializer = if self.match_next(vec![TokenType::Equal]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration.",
+        )?;
+
+        Ok(Stmt::Var(Box::new(VarStmt::new(name, initializer))))
     }
 }
 

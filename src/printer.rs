@@ -62,4 +62,15 @@ impl Visitor<String> for AstPrinter {
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> String {
         self.print_expr(&stmt.expression)
     }
+
+    fn visit_var_stmt(&mut self, stmt: &VarStmt) -> String {
+        match &stmt.initializer {
+            Some(expr) => format!("(var {} {})", stmt.name.lexeme, self.print_expr(expr)),
+            None => format!("(var {})", stmt.name.lexeme),
+        }
+    }
+
+    fn visit_variable_expr(&mut self, expr: &VariableExpr) -> String {
+        expr.name.lexeme.clone()
+    }
 }

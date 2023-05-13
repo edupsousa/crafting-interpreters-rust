@@ -73,4 +73,8 @@ impl Visitor<String> for AstPrinter {
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> String {
         expr.name.lexeme.clone()
     }
+
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> String {
+        format!("(= {} {})", expr.name.lexeme, self.print_expr(&expr.value))
+    }
 }

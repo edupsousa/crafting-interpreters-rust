@@ -10,6 +10,7 @@ pub enum Expr {
     Literal(Box<LiteralExpr>),
     Unary(Box<UnaryExpr>),
     Variable(Box<VariableExpr>),
+    Assignment(Box<AssignExpr>),
 }
 
 impl Expr {
@@ -20,7 +21,24 @@ impl Expr {
             Self::Literal(expr) => expr.accept(visitor),
             Self::Unary(expr) => expr.accept(visitor),
             Self::Variable(expr) => expr.accept(visitor),
+            Self::Assignment(expr) => expr.accept(visitor),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AssignExpr {
+    pub name: Token,
+    pub value: Expr,
+}
+
+impl AssignExpr {
+    pub fn new(name: Token, value: Expr) -> Self {
+        Self { name, value }
+    }
+
+    fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
+        visitor.visit_assign_expr(self)
     }
 }
 
@@ -185,6 +203,7 @@ pub trait Visitor<T> {
     fn visit_literal_expr(&mut self, expr: &LiteralExpr) -> T;
     fn visit_unary_expr(&mut self, expr: &UnaryExpr) -> T;
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> T;
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> T;
     // Statements
     fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> T;
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> T;

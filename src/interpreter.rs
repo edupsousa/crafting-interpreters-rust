@@ -170,6 +170,12 @@ impl Visitor<RuntimeResult> for Interpreter {
     fn visit_variable_expr(&mut self, expr: &VariableExpr) -> RuntimeResult {
         self.environment.get(&expr.name)
     }
+
+    fn visit_assign_expr(&mut self, expr: &AssignExpr) -> RuntimeResult {
+        let value = self.evaluate(&expr.value)?;
+        self.environment.assign(&expr.name, value.clone())?;
+        Ok(value)
+    }
 }
 
 #[derive(Debug)]
@@ -218,6 +224,19 @@ impl Environment {
     fn get(&self, token: &Token) -> RuntimeResult {
         match self.values.get(&token.lexeme) {
             Some(value) => Ok(value.clone()),
+            None => Err(RuntimeError::new(
+                token.clone(),
+                format!("Undefined variable '{}'.", token.lexeme),
+            )),
+        }
+    }
+
+    fn assign(&mut self, token: &Token, value: LiteralValue) -> RuntimeResult {
+        match self.values.get_mut(&token.lexeme) {
+            Some(v) => {
+                *v = value;
+                Ok(LiteralValue::Nil)
+            }
             None => Err(RuntimeError::new(
                 token.clone(),
                 format!("Undefined variable '{}'.", token.lexeme),

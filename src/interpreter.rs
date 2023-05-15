@@ -196,6 +196,17 @@ impl Visitor<RuntimeResult> for Interpreter {
         self.execute_block(&stmt.statements)?;
         Ok(LiteralValue::Nil)
     }
+
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> RuntimeResult {
+        let condition_result = self.evaluate(&stmt.condition)?;
+
+        if self.is_truthy(&condition_result) {
+            self.execute(&stmt.then_branch)?;
+        } else if let Some(else_branch) = &stmt.else_branch {
+            self.execute(else_branch)?;
+        }
+        Ok(LiteralValue::Nil)
+    }
 }
 
 #[derive(Debug)]

@@ -248,6 +248,9 @@ impl Parser {
     }
 
     fn statement(&mut self) -> StmtParseResult {
+        if self.match_next(vec![TokenType::If]) {
+            return self.if_statement();
+        }
         if self.match_next(vec![TokenType::Print]) {
             return self.print_statement();
         }
@@ -255,6 +258,25 @@ impl Parser {
             return self.block();
         }
         self.expression_statement()
+    }
+
+    fn if_statement(&mut self) -> StmtParseResult {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after if condition.")?;
+
+        let then_branch = self.statement()?;
+        let else_branch = if self.match_next(vec![TokenType::Else]) {
+            Some(self.statement()?)
+        } else {
+            None
+        };
+
+        Ok(Stmt::If(Box::new(IfStmt::new(
+            condition,
+            then_branch,
+            else_branch,
+        ))))
     }
 
     fn print_statement(&mut self) -> StmtParseResult {

@@ -85,4 +85,18 @@ impl Visitor<String> for AstPrinter {
         }
         result
     }
+
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> String {
+        let mut result = String::new();
+        result.push_str(&format!(
+            "(if {} {} {})",
+            self.print_expr(&stmt.condition),
+            self.print_stmt(&stmt.then_branch),
+            match &stmt.else_branch {
+                Some(else_branch) => self.print_stmt(else_branch),
+                None => "nil".to_string(),
+            }
+        ));
+        result
+    }
 }

@@ -127,6 +127,7 @@ pub enum Stmt {
     Print(Box<PrintStmt>),
     Var(Box<VarStmt>),
     Block(Box<BlockStmt>),
+    If(Box<IfStmt>),
 }
 
 impl Stmt {
@@ -136,6 +137,24 @@ impl Stmt {
             Stmt::Print(stmt) => visitor.visit_print_stmt(stmt),
             Stmt::Var(stmt) => visitor.visit_var_stmt(stmt),
             Stmt::Block(stmt) => visitor.visit_block_stmt(stmt),
+            Stmt::If(stmt) => visitor.visit_if_stmt(stmt),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IfStmt {
+    pub condition: Expr,
+    pub then_branch: Stmt,
+    pub else_branch: Option<Stmt>,
+}
+
+impl IfStmt {
+    pub fn new(condition: Expr, then_branch: Stmt, else_branch: Option<Stmt>) -> Self {
+        Self {
+            condition,
+            then_branch,
+            else_branch,
         }
     }
 }
@@ -198,4 +217,5 @@ pub trait Visitor<T> {
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> T;
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> T;
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> T;
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> T;
 }

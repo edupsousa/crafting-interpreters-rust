@@ -207,6 +207,22 @@ impl Visitor<RuntimeResult> for Interpreter {
         }
         Ok(LiteralValue::Nil)
     }
+
+    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> RuntimeResult {
+        let left = self.evaluate(&expr.left)?;
+
+        if expr.operator.token_type == TokenType::Or {
+            if self.is_truthy(&left) {
+                return Ok(left);
+            }
+        } else {
+            if !self.is_truthy(&left) {
+                return Ok(left);
+            }
+        }
+
+        self.evaluate(&expr.right)
+    }
 }
 
 #[derive(Debug)]

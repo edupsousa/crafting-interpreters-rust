@@ -67,7 +67,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> ExprParseResult {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if self.match_next(vec![TokenType::Equal]) {
             let equals = self.previous();
@@ -85,6 +85,30 @@ impl Parser {
                     ))
                 }
             }
+        }
+
+        Ok(expr)
+    }
+
+    fn or(&mut self) -> ExprParseResult {
+        let mut expr = self.and()?;
+
+        while self.match_next(vec![TokenType::Or]) {
+            let operator = self.previous();
+            let right = self.and()?;
+            expr = Expr::Logical(Box::new(LogicalExpr::new(expr, operator, right)));
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> ExprParseResult {
+        let mut expr = self.equality()?;
+
+        while self.match_next(vec![TokenType::And]) {
+            let operator = self.previous();
+            let right = self.equality()?;
+            expr = Expr::Logical(Box::new(LogicalExpr::new(expr, operator, right)));
         }
 
         Ok(expr)

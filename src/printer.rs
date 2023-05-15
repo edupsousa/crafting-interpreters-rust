@@ -99,4 +99,13 @@ impl Visitor<String> for AstPrinter {
         ));
         result
     }
+
+    fn visit_logical_expr(&mut self, expr: &LogicalExpr) -> String {
+        format!(
+            "({} {} {})",
+            expr.operator.lexeme,
+            self.print_expr(&expr.left),
+            self.print_expr(&expr.right)
+        )
+    }
 }

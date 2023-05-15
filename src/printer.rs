@@ -108,4 +108,12 @@ impl Visitor<String> for AstPrinter {
             self.print_expr(&expr.right)
         )
     }
+
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> String {
+        format!(
+            "(while {} {})",
+            self.print_expr(&stmt.condition),
+            self.print_stmt(&stmt.body)
+        )
+    }
 }

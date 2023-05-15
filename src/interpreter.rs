@@ -223,6 +223,17 @@ impl Visitor<RuntimeResult> for Interpreter {
 
         self.evaluate(&expr.right)
     }
+
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> RuntimeResult {
+        loop {
+            let condition_result = self.evaluate(&stmt.condition)?;
+            if !self.is_truthy(&condition_result) {
+                break;
+            }
+            self.execute(&stmt.body)?;
+        }
+        Ok(LiteralValue::Nil)
+    }
 }
 
 #[derive(Debug)]

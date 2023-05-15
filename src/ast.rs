@@ -147,6 +147,7 @@ pub enum Stmt {
     Var(Box<VarStmt>),
     Block(Box<BlockStmt>),
     If(Box<IfStmt>),
+    While(Box<WhileStmt>),
 }
 
 impl Stmt {
@@ -157,7 +158,20 @@ impl Stmt {
             Stmt::Var(stmt) => visitor.visit_var_stmt(stmt),
             Stmt::Block(stmt) => visitor.visit_block_stmt(stmt),
             Stmt::If(stmt) => visitor.visit_if_stmt(stmt),
+            Stmt::While(stmt) => visitor.visit_while_stmt(stmt),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct WhileStmt {
+    pub condition: Expr,
+    pub body: Stmt,
+}
+
+impl WhileStmt {
+    pub fn new(condition: Expr, body: Stmt) -> Self {
+        Self { condition, body }
     }
 }
 
@@ -238,4 +252,5 @@ pub trait Visitor<T> {
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> T;
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> T;
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> T;
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> T;
 }
